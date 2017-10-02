@@ -315,8 +315,13 @@ handle_session(#server_hello{cipher_suite = CipherSuite,
 	    handle_new_session(NewId, CipherSuite, Compression,
 			       State#state{connection_states = ConnectionStates});
 	false ->
-	    handle_resumed_session(NewId,
+	    try handle_resumed_session(NewId,
 				   State#state{connection_states = ConnectionStates})
+		catch
+			_:no_session ->
+				handle_new_session(NewId, CipherSuite, Compression,
+								   State#state{connection_states = ConnectionStates})
+		end
     end.
 
 %%--------------------------------------------------------------------
@@ -2114,7 +2119,8 @@ handle_resumed_session(SessId, #state{connection_states = ConnectionStates0,
 				      protocol_cb = Connection,
 				      session_cache = Cache,
 				      session_cache_cb = CacheCb} = State0) ->
-    Session = CacheCb:lookup(Cache, {{Host, Port}, SessId}),
+    Session = CacheCb:lookup(Cache, {{Host, Port}, SessId}),	
+    Session /= undefined orelse exit(no_session),
     case ssl_handshake:master_secret(ssl:tls_version(Version), Session,
 				     ConnectionStates0, client) of
 	{_, ConnectionStates} ->
